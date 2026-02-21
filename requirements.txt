@@ -1,13 +1,17 @@
 pypdf
 langchain
 langchain-community
-chromadb # Vector storage
 supabase
 python-dotenv
 pytest
 boto3
-torch
 transformers
 huggingface-hub
 langchain-huggingface
 sentence-transformers
+google-genai
+
+
+#optional
+#langchain-core
+
