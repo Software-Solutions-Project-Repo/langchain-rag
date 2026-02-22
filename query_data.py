@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from langchain_chroma import Chroma
 from langchain_core.prompts import ChatPromptTemplate
 from huggingface_hub import login
-from transformers import pipeline
+# from transformers import pipeline
 from google import genai
 from get_embedding_function import get_embedding_function
 
