@@ -35,9 +35,9 @@ def query_rag(query_text: str):
         print("No results found.")
         return
 # Print the results with their similarity scores
-    for i, row in enumerate(results, 1):
-        print(f"\n--- Result {i} (similarity: {row.get('similarity', 'N/A'):.4f}) ---")
-        print(row["content"])
+    #for i, row in enumerate(results, 1):
+       # print(f"\n--- Result {i} (similarity: {row.get('similarity', 'N/A'):.4f}) ---")
+       # print(row["content"])
 
     return results
 

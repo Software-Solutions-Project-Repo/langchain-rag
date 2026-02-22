@@ -3,7 +3,9 @@
 #If the tokens run out, make your own api key on https://aistudio.google.com/api-keys
 
 from dotenv import load_dotenv
+from query_data import query_rag
 import os
+
 
 # from langchain_community.llms import HuggingFacePipeline
 
@@ -36,9 +38,11 @@ template = """
 You are a payroll assistant bot. Answer the question based on payroll, ignore 
 any questions not related to payroll. if you don't know the answer, do not hallucinate it.
 Say you don't know the answer. 
-For sensitive information such as employee's personal information, say you don't have access to that information.  
+For sensitive information such as employee's personal information, say you don't have access to that information. 
 
-Here are your resources {context}
+For the context of the question, here are some relevant documents that may help you answer the question. Use this information to provide a more accurate and helpful answer to the user's question.
+
+Here are your resources {context} 
 
 Here is the question to answer: {question}
 
@@ -57,7 +61,10 @@ while True:
     if user_question.lower() == 'quit':
         print("Thank you for using our payroll assistant chatbot. Have a Good Day!")
         break
-
+    #adding the supabase query results to the context of the prompt to give the LLM more information to work with when answering the user's question.
+    #the query results are stored in the variable 'results' and we are adding them to
+    results = query_rag(user_question)
+    context += "\n".join([f"- {result['content']}" for result in results])
 
     output = chain.invoke({
     "context": context,
