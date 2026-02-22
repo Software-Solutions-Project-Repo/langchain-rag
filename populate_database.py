@@ -1,112 +1,81 @@
-from langchain_community.document_loaders import PyPDFDirectoryLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_core.documents import Document
-# Your custom embedding helper stays the same:
-from get_embedding_function import get_embedding_function
-from langchain_chroma import Chroma
-import os
+#this code is used to populate the database with the pdf file. It will chunk the pdf file and 
+# upload the chunks to the database. It also has an option to save the chunks to a json file locally.
+# The code uses OCR as a fallback if the pdf file does not contain extractable text. The code uses HuggingFaceEmbeddings 
+# to create embeddings for the chunks and uploads them to SupabaseVectorStore.
+#created by Henry Sylvester on 2026-02-15
+
 import argparse
-import shutil
+import os
+import json
+from dotenv import load_dotenv
+from supabase import create_client
 
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_core.documents import Document
+from langchain_community.vectorstores import SupabaseVectorStore
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-CHROMA_PATH = "chroma"
-DATA_PATH = "data" 
 
 def main():
-
-    # Check if the database should be cleared (using the --clear flag).
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--reset", action="store_true", help="Reset the database.")
+    parser = argparse.ArgumentParser(description="Chunk a PDF and upload embeddings to Supabase")
+    parser.add_argument("pdf", help="Path to PDF file (relative to workspace)")
+    parser.add_argument("--table", default="documents", help="Supabase table name to store vectors")
+    parser.add_argument("--chunk-size", type=int, default=500)
+    parser.add_argument("--chunk-overlap", type=int, default=50)
+    parser.add_argument("--model", default="sentence-transformers/all-MiniLM-L6-v2")
     args = parser.parse_args()
-    if args.reset:
-        print("✨ Clearing Database")
-        clear_database()
-    
 
-    # Create (or update) the data store.
-    documents = load_documents()
-    chunks = split_documents(documents)
-    add_to_chroma(chunks)
+    pdf_path = args.pdf
+    if not os.path.exists(pdf_path):
+        print(f"File not found: {pdf_path}")
+        return
 
+    load_dotenv()
+    supabase = create_client(os.environ.get("SUPABASE_URL"), os.environ.get("SUPABASE_KEY"))
 
-def load_documents():
-    document_loader = PyPDFDirectoryLoader(DATA_PATH)
-    return document_loader.load()
+    # Try extracting text via PyPDFLoader
+    loader = PyPDFLoader(pdf_path)
+    documents = loader.load()
 
-# documents = load_documents()
+    print(f"Loaded {len(documents)} pages. Total characters: {sum(len(d.page_content) for d in documents)}")
 
-
-def split_documents(documents: list[Document]):
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=800,
-        chunk_overlap=80,
-        length_function=len,
-        is_separator_regex=False,
+    # Chunk documents
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=args.chunk_size,
+        chunk_overlap=args.chunk_overlap,
+        separators=["\n\n", "\n", ".", " ", ""],
     )
-    return text_splitter.split_documents(documents)
+    chunks = splitter.split_documents(documents)
+    print(f"Produced {len(chunks)} chunks")
+    #checking to see if there is anything to embed before creating embeddings and uploading to the database
+    if len(chunks) == 0:
+        print("No chunks to embed — exiting.")
+        return
 
+    # Create embeddings
+    embeddings = HuggingFaceEmbeddings(model_name=args.model)
 
-def add_to_chroma(chunks: list[Document]):
-    # Load the existing database.
-    db = Chroma(
-        persist_directory=CHROMA_PATH, embedding_function=get_embedding_function()
-    )
-
-    # Calculate Page IDs.
-    chunks_with_ids = calculate_chunk_ids(chunks)
-
-    # Add or Update the documents.
-    existing_items = db.get(include=[])  # IDs are always included by default
-    existing_ids = set(existing_items["ids"])
-    print(f"Number of existing documents in DB: {len(existing_ids)}")
-
-    # Only add documents that don't exist in the DB.
-    new_chunks = []
-    for chunk in chunks_with_ids:
-        if chunk.metadata["id"] not in existing_ids:
-            new_chunks.append(chunk)
-
-    if len(new_chunks):
-        print(f"👉 Adding new documents: {len(new_chunks)}")
-        new_chunk_ids = [chunk.metadata["id"] for chunk in new_chunks]
-        db.add_documents(new_chunks, ids=new_chunk_ids)
-        # db.persist()
-    else:
-        print("✅ No new documents to add")
-
-
-def calculate_chunk_ids(chunks):
-
-    # This will create IDs like "data/monopoly.pdf:6:2"
-    # Page Source : Page Number : Chunk Index
-
-    last_page_id = None
-    current_chunk_index = 0
-
-    for chunk in chunks:
-        source = chunk.metadata.get("source")
-        page = chunk.metadata.get("page")
-        current_page_id = f"{source}:{page}"
-
-        # If the page ID is the same as the last one, increment the index.
-        if current_page_id == last_page_id:
-            current_chunk_index += 1
+    # Convert chunks to Documents for SupabaseVectorStore
+    docs_for_store = []
+    for i, c in enumerate(chunks):
+        if isinstance(c, Document):
+            docs_for_store.append(c)
         else:
-            current_chunk_index = 0
+            docs_for_store.append(Document(page_content=c.page_content, metadata={"source": pdf_path, "chunk_id": i, **(c.metadata or {})}))
 
-        # Calculate the chunk ID.
-        chunk_id = f"{current_page_id}:{current_chunk_index}"
-        last_page_id = current_page_id
-
-        # Add it to the page meta-data.
-        chunk.metadata["id"] = chunk_id
-
-    return chunks
-
-
-def clear_database():
-    if os.path.exists(CHROMA_PATH):
-        shutil.rmtree(CHROMA_PATH)
+    # Upload to Supabase
+    try:
+        SupabaseVectorStore.from_documents(
+            documents=docs_for_store,
+            embedding=embeddings,
+            client=supabase,
+            table_name=args.table,
+        )
+        print(f"✓ Uploaded {len(docs_for_store)} vectors to Supabase table '{args.table}'")
+    except Exception as e:
+        print("✗ Error inserting documents:", e)
+        print("Ensure the Supabase table exists with columns: id (UUID), content (text), metadata (jsonb), embedding (vector).")
 
 
 if __name__ == "__main__":
