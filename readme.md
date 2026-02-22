@@ -9,6 +9,7 @@ This project builds a pipeline to:
 2. Generate vector embeddings using sentence-transformers
 3. Store embeddings in Supabase vector database
 4. Retrieve relevant documents via semantic similarity search
+5. Answer payroll-related questions via a conversational chatbot powered by Google Gemini
 
 ## Setup
 
@@ -34,7 +35,12 @@ Create a `.env` file in the project root:
 ```
 SUPABASE_URL=your_supabase_url
 SUPABASE_KEY=your_supabase_key
+GOOGLE_API_KEY=your_gemini_api_key
 ```
+
+Get a Gemini API key at https://aistudio.google.com/api-keys. The key is valid for 90 days with a limited token quota.
+
+> **Important:** Never commit `.env` to git. Add it to `.gitignore` to prevent your API key from being leaked.
 
 4. **Configure Supabase:**
 
@@ -114,6 +120,31 @@ To create an employee, navigate to...
 ...
 ```
 
+### 3. Run the Payroll Chatbot
+
+**File:** `LLM.py`
+
+An interactive conversational chatbot that combines Supabase vector search with Google Gemini to answer payroll-related questions. For each user question it:
+1. Queries Supabase for the most relevant document chunks via `query_rag()`
+2. Injects those results as context into a Gemini prompt
+3. Returns a grounded, payroll-focused answer
+
+The bot ignores non-payroll questions and will not hallucinate or expose sensitive employee data.
+
+```powershell
+python LLM.py
+```
+
+**Example session:**
+```
+Ask any question about the payroll service: (Enter 'quit' to exit the program)
+> how do I create an employee?
+Here's the answer to your question:
+To create an employee, navigate to...
+```
+
+Enter `quit` to exit.
+
 ## Data Processed
 
 ### PowPay Documentation (PDF)
@@ -130,6 +161,7 @@ c:\Projects\langchain-rag\
 ├── get_embedding_function.py        # Returns HuggingFace embedding model
 ├── populate_database.py             # PDF → chunks → embeddings → Supabase
 ├── query_data.py                    # Query Supabase by semantic similarity
+├── LLM.py                           # Payroll chatbot (Gemini + RAG)
 ├── requirements.txt                 # Python dependencies
 └── readme.md                        # This file
 ```
@@ -160,6 +192,7 @@ c:\Projects\langchain-rag\
 See `requirements.txt` for full list. Key packages:
 - `langchain-huggingface` — HuggingFace embedding integration
 - `langchain-community` — Document loaders and text splitters
+- `langchain-google-genai` — Google Gemini LLM integration
 - `sentence-transformers` — Local embedding model
 - `supabase` — Supabase client
 - `python-dotenv` — Environment variable management
@@ -169,6 +202,9 @@ See `requirements.txt` for full list. Key packages:
 
 ### `column reference "id" is ambiguous` error
 The `match_documents` function uses `language plpgsql` which causes a variable scoping conflict. Recreate it using `language sql` as shown in the setup above.
+
+### `403 PERMISSION_DENIED` / API key leaked error
+Google automatically revokes keys that are committed to public repositories. Generate a new key at https://aistudio.google.com/api-keys, update `GOOGLE_API_KEY` in your `.env`, and ensure `.env` is in `.gitignore`.
 
 ### Supabase table schema errors
 - Ensure the table has a UUID primary key (not BIGSERIAL)
