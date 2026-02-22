@@ -1,6 +1,7 @@
 pypdf
 langchain
 langchain-community
+langchain-chroma
 supabase
 python-dotenv
 pytest

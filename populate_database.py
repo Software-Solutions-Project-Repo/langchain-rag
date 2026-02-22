@@ -24,7 +24,6 @@ def main():
     
 
     # Create (or update) the data store.
-    clear_database()
     documents = load_documents()
     chunks = split_documents(documents)
     add_to_chroma(chunks)
