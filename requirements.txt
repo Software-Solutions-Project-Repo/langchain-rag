@@ -10,7 +10,7 @@ transformers
 huggingface-hub
 langchain-huggingface
 sentence-transformers
-google-genai
+langchain-google-genai
 
 
 #optional
