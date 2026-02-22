@@ -5,18 +5,16 @@ A Retrieval-Augmented Generation (RAG) system using LangChain, Supabase vector d
 ## Project Overview
 
 This project builds a pipeline to:
-1. Extract and chunk documents (Markdown & PDF)
+1. Extract and chunk PDF documents
 2. Generate vector embeddings using sentence-transformers
 3. Store embeddings in Supabase vector database
-4. Retrieve relevant documents via semantic search
-5. Generate answers using LLMs with retrieved context
+4. Retrieve relevant documents via semantic similarity search
 
 ## Setup
 
 ### Prerequisites
 - Python 3.13+
 - Supabase account with a project
-- HuggingFace API (optional, for some models)
 - Environment variables: `SUPABASE_URL`, `SUPABASE_KEY`
 
 ### Installation
@@ -26,29 +24,21 @@ This project builds a pipeline to:
 cd c:\Projects\langchain-rag
 ```
 
-2. **Create and activate virtual environment:**
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
-
-3. **Install dependencies:**
+2. **Install dependencies:**
 ```powershell
 pip install -r requirements.txt
 ```
 
-4. **Set up environment variables:**
+3. **Set up environment variables:**
 Create a `.env` file in the project root:
 ```
 SUPABASE_URL=your_supabase_url
 SUPABASE_KEY=your_supabase_key
-REPLICATE_API_TOKEN=your_replicate_token (optional)
-HUGGINGFACE_API_KEY=your_hf_key (optional)
 ```
 
-5. **Configure Supabase:**
+4. **Configure Supabase:**
 
-In your Supabase SQL editor, create the documents table:
+In your Supabase SQL editor, create the documents table and similarity search function:
 ```sql
 CREATE TABLE documents (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -61,118 +51,131 @@ CREATE TABLE documents (
 CREATE INDEX ON documents USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 ```
 
+Then create the `match_documents` RPC function used for vector similarity search:
+```sql
+create or replace function match_documents (
+  query_embedding vector(384),
+  match_count int default 5,
+  filter jsonb default '{}'
+) returns table (
+  id uuid,
+  content text,
+  metadata jsonb,
+  similarity float
+)
+language sql stable
+as $$
+  select
+    documents.id,
+    documents.content,
+    documents.metadata,
+    1 - (documents.embedding <=> query_embedding) as similarity
+  from documents
+  where documents.metadata @> filter
+  order by documents.embedding <=> query_embedding
+  limit match_count;
+$$;
+```
+
 ## Scripts & Workflow
 
-### 1. Extract & Chunk PDFs
+### 1. Populate the Database
 
-**File:** `pdf_to_supabase.py`
+**File:** `populate_database.py`
 
-Extracts text from PDFs, chunks them, and uploads embeddings to Supabase (with OCR fallback for scanned PDFs).
+Loads a PDF, chunks it using `RecursiveCharacterTextSplitter`, generates embeddings with HuggingFace, and uploads them to Supabase.
 
 ```powershell
-.\.venv\Scripts\python.exe pdf_to_supabase.py "data/PowPay Documentation.pdf" --save-json
+python populate_database.py "data/PowPay Documentation.pdf"
 ```
 
 **Options:**
-- `--save-json` — Save chunks to local JSON file
-- `--chunk-size` — Set chunk size (default: 500)
-- `--chunk-overlap` — Set overlap between chunks (default: 50)
-- `--table` — Supabase table name (default: documents)
-- `--model` — Embedding model (default: sentence-transformers/all-MiniLM-L6-v2)
+- `--table` — Supabase table name (default: `documents`)
+- `--chunk-size` — Size of each chunk in characters (default: 500)
+- `--chunk-overlap` — Overlap between chunks (default: 50)
+- `--model` — Embedding model (default: `sentence-transformers/all-MiniLM-L6-v2`)
 
-**Output:**
-- `PowPay Documentation_chunks.json` — 40 chunks extracted from PDF
+### 2. Query the Database
+
+**File:** `query_data.py`
+
+Embeds a query string and calls the `match_documents` RPC to retrieve the top 5 most similar chunks from Supabase, printing each result with its similarity score.
+
+```powershell
+python query_data.py "how to create an employee?"
+```
+
+**Output example:**
+```
+--- Result 1 (similarity: 0.8812) ---
+To create an employee, navigate to...
+
+--- Result 2 (similarity: 0.8540) ---
+...
+```
 
 ## Data Processed
 
-
 ### PowPay Documentation (PDF)
 - **Source:** `data/PowPay Documentation.pdf`
-- **Status:** ✓ Extracted (14 pages) → 40 chunks and uploaded to Supabase
+- **Status:** ✓ Chunked and uploaded to Supabase
 - **Content:** System documentation
-
 
 ## Project Structure
 
 ```
 c:\Projects\langchain-rag\
-├── .venv/                          # Virtual environment
-├── .vscode/
-│   └── settings.json               # VS Code settings (Python interpreter)
 ├── data/
-│   ├── Template Manager.md         # Chunked & embedded ✓
-│   ├── PowPay Documentation.pdf    # Chunked & embedded ✓
-│   └── Payroll Sheets.md           # Ready to process
-├── chunk_template_manager.py       # Markdown chunking script
-├── pdf_to_supabase.py              # PDF→Embedding→Supabase pipeline
-├── supabase_test.py                # Supabase connection test
-├── populate_database.py            # Legacy Chroma-based loader
-├── RAG.py                          # RAG chain implementation (WIP)
-├── requirements.txt                # Python dependencies
-└── readme.md                       # This file
+│   └── PowPay Documentation.pdf    # Source document
+├── get_embedding_function.py        # Returns HuggingFace embedding model
+├── populate_database.py             # PDF → chunks → embeddings → Supabase
+├── query_data.py                    # Query Supabase by semantic similarity
+├── requirements.txt                 # Python dependencies
+└── readme.md                        # This file
 ```
 
 ## Database Schema
 
 **Table: documents**
 
-| Column    | Type           | Description                           |
-|-----------|----------------|---------------------------------------|
-| id        | UUID           | Primary key, auto-generated           |
-| content   | TEXT           | Chunk content                         |
-| metadata  | JSONB          | Headers, source, page, chunk_id      |
-| embedding | vector(384)    | Sentence-transformers embedding      |
-| created_at| TIMESTAMP      | Creation timestamp                    |
+| Column    | Type        | Description                       |
+|-----------|-------------|-----------------------------------|
+| id        | UUID        | Primary key, auto-generated       |
+| content   | TEXT        | Chunk text content                |
+| metadata  | JSONB       | Source file, page number, chunk_id|
+| embedding | vector(384) | Sentence-transformers embedding   |
+| created_at| TIMESTAMP   | Creation timestamp                |
 
-**Index:** IVFFLAT on embedding column for fast similarity search
+**Index:** IVFFLAT on embedding column for fast cosine similarity search
 
 ## Embeddings Model
 
 **Model:** `sentence-transformers/all-MiniLM-L6-v2`
 - **Dimension:** 384
 - **Speed:** Fast, lightweight
-- **Use case:** Semantic search, retrieval
-
-## Testing
-
-### Test Supabase Connection
-```powershell
-.\.venv\Scripts\python.exe supabase_test.py
-```
-
-### Verify Embeddings Upload
-Query your Supabase table directly:
-```sql
-SELECT COUNT(*) FROM documents;
-SELECT * FROM documents LIMIT 5;
-```
+- **Use case:** Semantic search and retrieval
 
 ## Dependencies
 
 See `requirements.txt` for full list. Key packages:
-- `langchain` — LLM orchestration
-- `langchain-huggingface` — HuggingFace integrations
-- `sentence-transformers` — Embeddings
-- `supabase` — Vector database client
-- `python-dotenv` — Environment management
+- `langchain-huggingface` — HuggingFace embedding integration
+- `langchain-community` — Document loaders and text splitters
+- `sentence-transformers` — Local embedding model
+- `supabase` — Supabase client
+- `python-dotenv` — Environment variable management
 - `pypdf` — PDF text extraction
 
 ## Troubleshooting
 
-### Import errors in RAG.py
-- Imports have changed in newer LangChain versions
-- Use `langchain_community` and `langchain_huggingface` instead of legacy imports
-- See `pdf_to_supabase.py` for correct import patterns
-
-### PDF text extraction fails
-- Scanned/image PDFs require OCR
-- Install: `pip install pdf2image pytesseract`
-- Download Tesseract binary from https://github.com/tesseract-ocr/tesseract
+### `column reference "id" is ambiguous` error
+The `match_documents` function uses `language plpgsql` which causes a variable scoping conflict. Recreate it using `language sql` as shown in the setup above.
 
 ### Supabase table schema errors
-- Ensure table has UUID primary key, not BIGSERIAL
-- Embedding column must be `vector(384)` for sentence-transformers model
-- Run the SQL schema creation commands above
+- Ensure the table has a UUID primary key (not BIGSERIAL)
+- The embedding column must be `vector(384)` to match the sentence-transformers model
+
+### PDF text extraction returns 0 characters
+- Scanned/image-based PDFs require OCR — install `pdf2image` and `pytesseract`
 
 ## License
 
@@ -180,4 +183,4 @@ MIT
 
 ## Author
 
-Created with LangChain & Supabase
+Henry Sylvester — Created 2026-02-15
