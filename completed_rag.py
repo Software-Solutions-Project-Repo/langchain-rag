@@ -1,92 +1,95 @@
+#created by Jeremiah Clinton on 2026-02-23
+
 import os
 from dotenv import load_dotenv
 import argparse
 from supabase import create_client
-
+from query_data import query_rag
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import SupabaseVectorStore
-# from langchain_google_genai import ChatGoogleGenerativeAI
-from google import genai
+# from google import genai
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
 
 load_dotenv()
 
-# Initialize Supabase client
+
 supabase = create_client(
     os.environ["SUPABASE_URL"],
     os.environ["SUPABASE_KEY"]
 )
 
-# Embeddniig model used to turn user queries into vectors
 embeddings = HuggingFaceEmbeddings(
     model_name="sentence-transformers/all-MiniLM-L6-v2"
 )
 
-# Connect to existing Supabase vector store
 vector_store = SupabaseVectorStore(
-    client=supabase,
     embedding=embeddings,
-    table_name="documents"
+    client=supabase,
+    table_name="documents",
+    query_name="match_documents",
 )
 
-# Initialize Gemini LLM
-llm = ChatGoogleGenerativeAI(
-    model="gemini-1.5-flash",  # or gemini-1.5-pro
-    temperature=0.2
-)
+llm = ChatGoogleGenerativeAI(model = "gemini-flash-lite-latest", temperature = 0.3, 
+                             google_api_key = os.getenv("GEMINI_API_KEY") ) 
+# Change "GEMINI_API_KEY" to the name of your environment variable with your Google Gemini API key.
 
-# Prompt template
-prompt = ChatPromptTemplate.from_template("""
-You are a helpful assistant.
-Use ONLY the provided context to answer the question.
-If the answer is not in the context, say you don't know.
 
-Context:
-{context}
+# So that the LLM doesn't hallucinate or give unrelated responses
+template = """
+You are a payroll assistant bot. Answer the question based on payroll, ignore 
+any questions not related to payroll. if you don't know the answer, do not hallucinate it.
+Say you don't know the answer. 
+For sensitive information such as employee's personal information, say you don't have access to that information. 
 
-Question:
-{question}
+For the context of the question, here are some relevant documents that may help you answer the question. Use this information to provide a more accurate and helpful answer to the user's question.
+
+Here are your resources {context} 
+
+Here is the question to answer: {question}
 
 Answer:
-""")
-
-output_parser = StrOutputParser()
 
 
-def ask_question(question: str, k: int = 5):
-    print(f"\n🔎 Searching for relevant documents...")
+"""
 
-    # 1️⃣ Retrieve top-k similar documents
-    docs = vector_store.similarity_search(question, k=k)
+# Function for calling the LLM
+def invoke_LLM():
+    prompt = ChatPromptTemplate.from_template(template)
 
-    if not docs:
-        return "No relevant documents found."
+    chain = prompt | llm 
+    context = " This payroll application makes doing payroll easier and more efficient."
+    while True:
+        user_question = input("Ask any question about the payroll service: (Enter 'quit' to exit the program)")
 
-    # 2️⃣ Combine context
-    context = "\n\n".join([doc.page_content for doc in docs])
+        if user_question.lower() == 'quit':
+            print("Thank you for using our payroll assistant chatbot. Have a Good Day!")
+            break
+        #adding the supabase query results to the context of the prompt to give the LLM more information to work with when answering the user's question.
+        #the query results are stored in the variable 'results' and we are adding them to
+        results = query_rag(user_question)
+        context += "\n".join([f"- {result['content']}" for result in results])
 
-    print(f"✓ Retrieved {len(docs)} documents")
-
-    # 3️⃣ Create RAG chain
-    chain = prompt | llm | output_parser
-
-    # 4️⃣ Run LLM with context
-    response = chain.invoke({
+        output = chain.invoke({
         "context": context,
-        "question": question
-    })
+        "question": user_question })
+        print("Here's the answer to your question: \n" + output.content +"\n")
 
-    return response
 
+def main():
+    invoke_LLM()
+    
+
+    
 
 if __name__ == "__main__":
-    while True:
-        user_question = input("\nAsk a question (or type 'exit'): ")
-        if user_question.lower() == "exit":
-            break
+    main()
+    
 
-        answer = ask_question(user_question)
-        print("\n💬 Answer:")
-        print(answer)
+    
+
+
+
+    
