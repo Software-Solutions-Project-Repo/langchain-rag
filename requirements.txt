@@ -1,6 +1,7 @@
 pypdf
 langchain
 langchain-community
+langchain-chroma
 supabase
 python-dotenv
 pytest
@@ -9,11 +10,7 @@ transformers
 huggingface-hub
 langchain-huggingface
 sentence-transformers
-google-genai
-fastapi
-uvicorn
-pydantic
-open-webui
+langchain-google-genai
 
 
 #optional
