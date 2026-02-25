@@ -1,6 +1,7 @@
 pypdf
 langchain
 langchain-community
+langchain-core
 supabase
 python-dotenv
 pytest
@@ -13,9 +14,3 @@ google-genai
 fastapi
 uvicorn
 pydantic
-open-webui
-
-
-#optional
-#langchain-core
-
