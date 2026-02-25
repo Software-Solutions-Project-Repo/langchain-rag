@@ -32,8 +32,8 @@ vector_store = SupabaseVectorStore(
 )
 
 llm = ChatGoogleGenerativeAI(model = "gemini-flash-lite-latest", temperature = 0.3, 
-                             google_api_key = os.getenv("GEMINI_API_KEY") ) 
-# Change "GEMINI_API_KEY" to the name of your environment variable with your Google Gemini API key.
+                             google_api_key = os.getenv("GOOGLE_API_KEY") ) 
+
 
 
 # So that the LLM doesn't hallucinate or give unrelated responses
