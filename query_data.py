@@ -12,7 +12,10 @@ from get_embedding_function import get_embedding_function
 
 load_dotenv()
 
+<<<<<<< Updated upstream
 
+=======
+>>>>>>> Stashed changes
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("query_text", type=str, help="The query text.")
