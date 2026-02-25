@@ -3,5 +3,6 @@ chroma_*
 chroma
 .DS_Store
 get_embedding_function.py
-query_data.py
-
+henry's files
+rag-v2-tutorial
+completed_rag
