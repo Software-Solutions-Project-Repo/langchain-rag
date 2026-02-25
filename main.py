@@ -1,38 +1,90 @@
-#this code is just a template that is used to create a simple API using FastAPI. 
-# It defines two endpoints: the root endpoint ("/") which returns a simple
-# greeting message, and another endpoint ("/items/{item_id}") which takes
-# an item ID as a path parameter and an optional query parameter "q".
-# The response includes the item ID and the value of "q" if it is provided.
+#created by Jeremiah Clinton on 2026-02-23
 
-from fastapi import FastAPI, HTTPException, Query
-from query_database import get_top_k_matches
+import os
+import time
+import uuid
+import json
+from typing import List, Optional
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+from completed_rag import invoke_LLM
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.prompts import ChatPromptTemplate
 
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+llm = ChatGoogleGenerativeAI(
+    model="gemini-flash-lite-latest",
+    temperature=0.3,
+    google_api_key=os.getenv("GOOGLE_API_KEY"),
+)
+
+# ----------- Pydantic Models -----------
+
+# ChatMessage is an object for storing each chat message from Open WebUI
+# role can usually be either "user" (Human User) or "assisstant" (AI messages)
+# content is the message the user or AI bot sent
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+
+# ChatRequest is a collection of chat messages
+class ChatRequest(BaseModel):
+    model: str = "payroll-rag"
+    messages: list[ChatMessage]
+    stream: Optional[bool] = False
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+
+
+
+# ----------- Routes -----------
 
 @app.get("/")
-def read_root():
+def root():
     return {"Hello": "World"}
 
+# Post request endpoint for sending questions to Open WebUI
+@app.post("/v1/chat/completions")
+def chat(request: ChatRequest):
+    #For Keddish to complete
+    #Use invoke_LLM function to process user queries
 
-@app.get("/items/{item_id}")
-def read_item(item_id: int, q: str | None = None):
-    return {"item_id": item_id, "q": q}
+    return None # Change this
+
+# This is required by Open WebUI to discover available models.
+@app.get("/v1/models")
+def list_models(): 
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": "payroll-rag", #change payroll-rag to whatever name you gave the "model-id" in Open WebUI
+                "object": "model",
+                "created": int(time.time()),
+                "owned_by": "local",
+            }
+        ]
+    }
+    
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=True)
 
 
-@app.get("/search")
-def search(q: str = Query(..., title="Query string"), k: int = Query(1, ge=1, le=20)):
-    """Search the Supabase vector store for the most similar documents.
 
-    This reuses `get_top_k_matches` from `query_database.py` which will initialize
-    the embeddings and vector store as needed.
-    """
-    if not q or not q.strip():
-        raise HTTPException(status_code=400, detail="Empty query")
 
-    try:
-        results = get_top_k_matches(q, k=k)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-    return {"query": q, "k": k, "results": results}

@@ -34,6 +34,8 @@ llm = ChatGoogleGenerativeAI(model = "gemini-flash-lite-latest", temperature = 0
 
 
 
+
+
 template = """
 You are a payroll assistant bot. Answer the question based on payroll, ignore 
 any questions not related to payroll. if you don't know the answer, do not hallucinate it.

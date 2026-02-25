@@ -7,7 +7,6 @@ from supabase import create_client
 from query_data import query_rag
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import SupabaseVectorStore
-# from google import genai
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -33,8 +32,8 @@ vector_store = SupabaseVectorStore(
 )
 
 llm = ChatGoogleGenerativeAI(model = "gemini-flash-lite-latest", temperature = 0.3, 
-                             google_api_key = os.getenv("GEMINI_API_KEY") ) 
-# Change "GEMINI_API_KEY" to the name of your environment variable with your Google Gemini API key.
+                             google_api_key = os.getenv("GOOGLE_API_KEY") ) 
+
 
 
 # So that the LLM doesn't hallucinate or give unrelated responses
