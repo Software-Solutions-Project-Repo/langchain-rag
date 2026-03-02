@@ -36,7 +36,7 @@ llm = ChatGoogleGenerativeAI(
     google_api_key=os.getenv("GOOGLE_API_KEY"),
 )
 
-chat_history = []
+
 
 
 # ----------- Pydantic Models -----------
@@ -65,8 +65,11 @@ def root():
     return {"Hello": "World"}
 
 # Post request endpoint for sending questions to Open WebUI
+
+
 @app.post("/v1/chat/completions")
 async def chat(request: ChatRequest):
+    chat_history = []
     try:
         user_msg = next((m.content for m in reversed(request.messages)if m.role == "user"), None)
         if not user_msg:
@@ -76,7 +79,7 @@ async def chat(request: ChatRequest):
         
        
         def event_generator():
-            answer = ask_aichatbot_payroll_question(user_msg)
+            answer = ask_aichatbot_payroll_question(user_msg, chat_history)
             
             chat_history.append(f"Assistant: {answer}")
             for chunk in answer.split():
@@ -98,7 +101,7 @@ async def chat(request: ChatRequest):
         
         if request.stream is False: 
             
-           answer = ask_aichatbot_payroll_question(user_msg)
+           answer = ask_aichatbot_payroll_question(user_msg, chat_history)
 
            return {
              "id": f"chatcml-{int(time.time())}", 

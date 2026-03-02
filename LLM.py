@@ -60,7 +60,7 @@ prompt = ChatPromptTemplate.from_template(template)
 chain = prompt | llm 
 original_context = " This payroll application makes doing payroll easier and more efficient."
 
-def ask_aichatbot_payroll_question(user_question):
+def ask_aichatbot_payroll_question(user_question,chat_history):
     #for blank responses
     if not user_question:
         return "No question provided"
@@ -104,7 +104,7 @@ if __name__ == "__main__":
         
         chat_history.append(f"User:{user_question}")
 
-        answer = ask_aichatbot_payroll_question(user_question)
+        answer = ask_aichatbot_payroll_question(user_question,chat_history)
 
         chat_history.append(f"Assistant: {answer}")
         print("Here's the answer to your question: \n" + answer +"\n")
