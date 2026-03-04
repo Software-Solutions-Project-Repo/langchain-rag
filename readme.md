@@ -145,6 +145,35 @@ To create an employee, navigate to...
 
 Enter `quit` to exit.
 
+### 4. Run with Docker (Open WebUI)
+
+**Docker Setup:** Run the Open WebUI container using the following command:
+
+```bash
+docker run -d -p 3000:8080 -v open-webui:/app/backend/data --name open-webui --restart always ghcr.io/open-webui/open-webui:dev
+```
+
+**Command breakdown:**
+- `-d` — Run the container in detached mode (background)
+- `-p 3000:8080` — Map port 3000 on your host to port 8080 in the container
+- `-v open-webui:/app/backend/data` — Create a persistent volume for application data
+- `--name open-webui` — Name the container "open-webui"
+- `--restart always` — Automatically restart the container if it stops
+- `ghcr.io/open-webui/open-webui:dev` — The Docker image to use (development version)
+
+**Access the UI:**
+Once the container is running, access the Open WebUI at `http://localhost:3000`
+
+**Stop the container:**
+```bash
+docker stop open-webui
+```
+
+**Remove the container:**
+```bash
+docker rm open-webui
+```
+
 ## Data Processed
 
 ### PowPay Documentation (PDF)
