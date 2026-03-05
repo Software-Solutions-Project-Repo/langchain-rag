@@ -10,3 +10,16 @@ services:
         value: 3.11
       - key: PORT
         value: 8000
+
+  - type: web
+    name: open-webui
+    image: ghcr.io/open-webui/open-webui:dev
+    plan: free
+    ports:
+      - port: 8080
+        expose: true
+    envVars:
+      - key: OLLAMA_API_BASE_URL
+        value: ""
+      - key: RAG_API_BASE_URL
+        value: https://langchain-rag.onrender.com
