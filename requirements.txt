@@ -1,6 +1,7 @@
 pypdf
 langchain
 langchain-community
+psycopg2-binary
 langchain-core
 supabase
 python-dotenv
