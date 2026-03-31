@@ -35,7 +35,7 @@ llm = ChatGoogleGenerativeAI(model = "gemini-flash-lite-latest", temperature = 0
 
 
 template = """
-You are a payroll assistant bot. Answer the question based on payroll, ignore 
+You are a payroll assistant bot. Answer the question based on payroll, error codes and from the question bank, ignore 
 any questions not related to payroll. if you don't know the answer, do not hallucinate it.
 Say you don't know the answer. 
 For sensitive information such as employee's personal information, say you don't have access to that information. 
@@ -65,24 +65,56 @@ def ask_aichatbot_payroll_question(user_question,chat_history):
     if not user_question:
         return "No question provided"
     
-
-    #adding the supabase query results to the context of the prompt to give the LLM more information to work with when answering the user's question.
-    #the query results are stored in the variable 'results' and we are adding them t
-    context = original_context + "\n" + "\n".join(chat_history)
     results = query_rag(user_question) or []
+    #adding the supabase query results to the context of the prompt to give the LLM more information to work with when answering the user's question.
+
+     #Breaking the query up into the various sections such as question bank, documents and error code so that the llm can filter the most relevant answer 
+    doc_results = [r for r in results if r.get('content') and not r.get('question')]
+    qa_results =[r for r in results if r.get('question') and r.get('answer')]
+    error_results = [r for r in results if r.get('error_code')]
+
+   #this finds the similar answer 
+    def get_similarity(r):
+        similarity =  r.get('similarity')
+        return similarity if similarity is not None else 0.0
+
+    doc_results.sort(key=get_similarity , reverse = True)
+    qa_results.sort(key=get_similarity , reverse = True)
+    error_results.sort(key=get_similarity, reverse = True)
+
+    selected = doc_results[:3] +qa_results[:3] + error_results[:3]
+    
+    context = original_context + "\n\n"
+
+    qa_selected =[r for r in selected if r.get('question') and r.get('answer')]
+    if qa_selected:
+       context += "--From the question Bank--"
+       for r in qa_selected:
+          context += f"Q:{r['question']}\nA: {r['answer']}\n\n"
     
 
-    for r in results:
-        content = r.get('content', '')
-        if isinstance(content, (list,tuple)):
-            content = " ".join(str(x) for x in content)
-        context += f"\n -{content}"
-    #context += "\n" + "\n".join([f"-{r['content']}" for r in results])
+    error_selected =[r for r in selected if r.get('error_code')]
+    if error_selected:
+       context += "--From the Error--"
+       for r in error_selected:
+          context += f"Error:{r['error_code']}: {r.get('question', '')} -{r.get('answer','')}\n\n"
+
+    
+    doc_selected =[r for r in selected if r.get('content') and not r.get('question')]
+    if doc_selected:
+       context += "--From the document--"
+       for r in doc_selected:
+          context += f"Q:{r['content']}\n\n"
+
+  
+
+    if context.strip() == " ":
+        context += "\nNo relevant information found."
     try:
         output = chain.invoke({
            "context": context, 
             "question": user_question,
-            "chat_history": chat_history
+            "chat_history": "\n" .join(chat_history)
        })
         
         
