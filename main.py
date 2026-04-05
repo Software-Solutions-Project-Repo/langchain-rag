@@ -4,8 +4,8 @@ import os
 import time
 import uuid
 import json
-from typing import List, Optional
-from fastapi import FastAPI, HTTPException
+from typing import List, Optional, Any, Union
+from fastapi import FastAPI, HTTPException, Header
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -77,12 +77,17 @@ async def chat(request: ChatRequest):
 
         chat_history.append(f"User:{user_msg}")
         
-       
+        answer, images = ask_aichatbot_payroll_question(user_msg, chat_history)
+        formatted_images = "\n\n".join(
+               f"![image]({img})" for img in images
+           )
+        final_answer = answer
+        if formatted_images:
+            final_answer += "\n\n" + formatted_images
+
         def event_generator():
-            answer = ask_aichatbot_payroll_question(user_msg, chat_history)
-            
             chat_history.append(f"Assistant: {answer}")
-            for chunk in answer.split():
+            for chunk in final_answer.split():
                 data = {
                     "id": f"chatcml-{int(time.time())}", 
                     "object": "chat.completion.chunk", 
@@ -101,8 +106,6 @@ async def chat(request: ChatRequest):
         
         if request.stream is False: 
             
-           answer = ask_aichatbot_payroll_question(user_msg, chat_history)
-
            return {
              "id": f"chatcml-{int(time.time())}", 
              "object": "chat.completion",
@@ -113,7 +116,7 @@ async def chat(request: ChatRequest):
                   "index": 0, 
                   "message": {
                       "role": "assistant", 
-                      "content": answer
+                      "content": final_answer
                     }, 
                    "finish_reason": "stop"
                }
@@ -126,7 +129,6 @@ async def chat(request: ChatRequest):
     except Exception as e:
         print("Error in chat completions route", e)
         return{"error": str(e)}
-
 
 
 
