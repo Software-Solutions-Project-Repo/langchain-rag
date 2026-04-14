@@ -137,7 +137,7 @@ def ask_aichatbot_payroll_question(user_question,chat_history):
 
     except Exception as e:
        print("LLM call fail:", e)
-       return "Cannot Service your request. Sorry"
+       return "Cannot Service your request. Sorry", []
     
 #For testing it in the terminal 
 if __name__ == "__main__":
